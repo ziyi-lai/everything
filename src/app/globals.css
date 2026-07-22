@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+/* `light:` variant — style against the theme the page is actually in.
+   Mirrors how the tokens below are scoped (:root.light). */
+@custom-variant light (&:where(:root.light, :root.light *));
+
+/* ============================================================
+   Nothing Design System — tokens
+   Dark = default (OLED instrument panel). .light overrides.
+   See docs/EVERYTHING_SPEC.md and the nothing-design skill.
+   ============================================================ */
+
+:root {
+  --black: #000000;
+  --surface: #111111;
+  --surface-raised: #1a1a1a;
+  --border: #222222;
+  --border-visible: #333333;
+  --text-disabled: #666666;
+  --text-secondary: #999999;
+  --text-primary: #e8e8e8;
+  --text-display: #ffffff;
+
+  --accent: #d71921;
+  --accent-subtle: rgba(215, 25, 33, 0.15);
+  --success: #4a9e5c;
+  --warning: #d4a843;
+  --error: #d71921;
+  --info: #999999;
+  --interactive: #5b9bf6;
+
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+  --ease-out-mech: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+:root.light {
+  --black: #f5f5f5;
+  --surface: #ffffff;
+  --surface-raised: #f0f0f0;
+  --border: #e8e8e8;
+  --border-visible: #cccccc;
+  --text-disabled: #999999;
+  --text-secondary: #666666;
+  --text-primary: #1a1a1a;
+  --text-display: #000000;
+  --interactive: #007aff;
+}
+
+@theme inline {
+  --color-black: var(--black);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-visible: var(--border-visible);
+  /* short aliases — avoids Tailwind's `{utility}-{full-key}` doubling on text-* keys
+     (e.g. a literal --color-text-primary token would only generate `text-text-primary`) */
+  --color-faint: var(--text-disabled);
+  --color-muted: var(--text-secondary);
+  --color-foreground: var(--text-primary);
+  --color-hero: var(--text-display);
+
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --color-interactive: var(--interactive);
+
+  --color-background: var(--black);
+
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-space-mono);
+  --font-display: var(--font-doto);
+
+  --text-display-xl: 72px;
+  --text-display-lg: 48px;
+  --text-display-md: 36px;
+  --text-heading: 24px;
+  --text-subheading: 18px;
+  --text-body: 16px;
+  --text-body-sm: 14px;
+  --text-caption: 12px;
+  --text-label: 11px;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    background: var(--black);
+  }
+  body {
+    background: var(--black);
+    color: var(--text-primary);
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--text-display);
+  }
+}
+
+@layer utilities {
+  /* ALL CAPS Space Mono instrument label — the recurring tertiary-layer voice */
+  .label {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .dot-grid {
+    background-image: radial-gradient(circle, var(--border-visible) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .dot-grid-subtle {
+    background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.5px);
+    background-size: 12px 12px;
+  }
+
+  /* Mechanical, percussive transitions — no spring/bounce, opacity over position */
+  .transition-mech {
+    transition-timing-function: var(--ease-out-mech);
+    transition-duration: 200ms;
+  }
+}
