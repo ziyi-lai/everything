@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Link2 } from "lucide-react";
 import type { Capture } from "@/hooks/use-captures";
+import { useTasks } from "@/hooks/use-tasks";
+import { TaskLinkPicker } from "@/components/shared/task-link-picker";
 import { formatDuration } from "@/lib/period";
 
 /** <input type="datetime-local"> wants local wall-clock, not a UTC ISO string. */
@@ -28,10 +30,15 @@ export function EntryDetail({
   const [title, setTitle] = useState(entry?.parsed_title ?? entry?.raw_text ?? "");
   const [start, setStart] = useState(toLocalInput(entry?.start_time ?? null));
   const [end, setEnd] = useState(toLocalInput(entry?.end_time ?? null));
+  const [linkedTaskId, setLinkedTaskId] = useState<string | null>(entry?.converted_to_task_id ?? null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const { tasks } = useTasks();
 
   if (!entry) return null;
+
+  const linkedTask = tasks.find((t) => t.id === linkedTaskId) ?? null;
 
   async function save() {
     if (!entry) return;
@@ -51,6 +58,7 @@ export function EntryDetail({
       parsed_title: title.trim() || null,
       start_time: startIso,
       end_time: endIso,
+      converted_to_task_id: linkedTaskId,
     });
 
     if (result === null) {
@@ -102,6 +110,41 @@ export function EntryDetail({
                 className="label rounded-full border border-border-visible bg-transparent px-3 py-1.5 text-foreground outline-none"
               />
             </Field>
+          </div>
+
+          <div className="mt-4">
+            {linkedTask ? (
+              <div className="label flex items-center gap-1.5 !text-interactive">
+                <Link2 size={11} strokeWidth={1.5} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{linkedTask.title}</span>
+                <button
+                  type="button"
+                  aria-label="Unlink task"
+                  onClick={() => setLinkedTaskId(null)}
+                  className="shrink-0 transition-mech hover:!text-accent"
+                >
+                  <X size={11} strokeWidth={2} />
+                </button>
+              </div>
+            ) : pickerOpen ? (
+              <TaskLinkPicker
+                tasks={tasks}
+                onCancel={() => setPickerOpen(false)}
+                onSelect={(task) => {
+                  setLinkedTaskId(task.id);
+                  setPickerOpen(false);
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="label flex items-center gap-1.5 !text-faint transition-mech hover:!text-muted"
+              >
+                <Link2 size={11} strokeWidth={1.5} />
+                LINK TO TASK
+              </button>
+            )}
           </div>
 
           {status === "error" && <p className="label mt-4 !text-accent">[ERROR] {errorMessage}</p>}

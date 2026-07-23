@@ -4,11 +4,11 @@ import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Trash2 } from "lucide-react";
 import { TagInput } from "@/components/tasks/tag-input";
+import { PrioritySlider } from "@/components/tasks/priority-slider";
 import type { Task } from "@/hooks/use-tasks";
 import type { Enums } from "@/lib/supabase/types";
 
 const STATUSES: Enums<"task_status">[] = ["backlog", "todo", "in_progress", "done", "cancelled"];
-const PRIORITIES: Enums<"task_priority">[] = ["urgent", "high", "medium", "low"];
 const DOMAINS: Enums<"task_domain">[] = ["coding", "research", "writing", "life", "health", "finance", "other"];
 
 export function TaskDetail({
@@ -84,22 +84,10 @@ export function TaskDetail({
               </select>
             </Field>
 
-            <Field label="PRIORITY">
-              <div className="flex items-center gap-1 rounded-full border border-border-visible p-1">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => save({ priority: p })}
-                    className={`label rounded-full px-3 py-1.5 transition-mech ${
-                      (task.priority ?? "medium") === p ? "bg-hero !text-black" : "!text-muted hover:!text-foreground"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </Field>
+            <div>
+              <span className="label mb-2 block !text-muted">PRIORITY</span>
+              <PrioritySlider value={task.priority ?? "medium"} onChange={(p) => save({ priority: p })} />
+            </div>
 
             <Field label="DOMAIN">
               <select

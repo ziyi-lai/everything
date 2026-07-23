@@ -19,6 +19,7 @@ export default function TimePage() {
   const [mode, setMode] = useState<PeriodMode>("DAY");
   const [anchor, setAnchor] = useState(() => todayString());
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
 
   const timeline = useCaptures({ is_timer: true });
 
@@ -32,6 +33,21 @@ export default function TimePage() {
   }, []);
 
   const detailEntry = timeline.captures.find((c) => c.id === detailId) ?? null;
+
+  async function handleCreateEntry(start: Date, end: Date) {
+    const durationSeconds = Math.max(60, Math.round((end.getTime() - start.getTime()) / 1000));
+    const created = await timeline.createCapture({
+      raw_text: "Untitled session",
+      is_timer: true,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      duration_seconds: durationSeconds,
+    });
+    // straight into rename — a drag-created block starts nameless, so open
+    // its detail immediately rather than leaving "Untitled session" sitting there
+    setDetailId(created.id);
+    setPendingCreateId(created.id);
+  }
 
   return (
     <div className="flex flex-col gap-10">
@@ -106,6 +122,10 @@ export default function TimePage() {
           anchor={anchor}
           mode={mode}
           onSelect={(entry) => setDetailId(entry.id)}
+          onReschedule={(id, newStart, newEnd) =>
+            timeline.updateCapture(id, { start_time: newStart.toISOString(), end_time: newEnd.toISOString() })
+          }
+          onCreate={handleCreateEntry}
         />
       ) : (
         <TimeAnalytics entries={timeline.captures} anchor={anchor} mode={mode} />
@@ -114,9 +134,26 @@ export default function TimePage() {
       <EntryDetail
         key={detailEntry?.id ?? "empty"}
         entry={detailEntry}
-        onOpenChange={(open) => !open && setDetailId(null)}
-        onSave={(id, patch) => timeline.updateCapture(id, patch)}
-        onDelete={(id) => timeline.deleteCapture(id)}
+        onOpenChange={(open) => {
+          if (!open) {
+            // closing without saving (ESC, backdrop, X) on a freshly
+            // drag-created entry cancels the creation instead of leaving
+            // a stray "Untitled session" behind
+            if (pendingCreateId) {
+              timeline.deleteCapture(pendingCreateId);
+              setPendingCreateId(null);
+            }
+            setDetailId(null);
+          }
+        }}
+        onSave={(id, patch) => {
+          if (id === pendingCreateId) setPendingCreateId(null);
+          return timeline.updateCapture(id, patch);
+        }}
+        onDelete={(id) => {
+          if (id === pendingCreateId) setPendingCreateId(null);
+          timeline.deleteCapture(id);
+        }}
       />
     </div>
   );

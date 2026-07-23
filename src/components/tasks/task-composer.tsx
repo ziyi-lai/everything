@@ -2,21 +2,14 @@
 
 import { useMemo, useState, type KeyboardEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, CornerDownLeft, Calendar, Flag, Layers } from "lucide-react";
+import { X, CornerDownLeft, Calendar, Layers } from "lucide-react";
 import { parseCapture } from "@/lib/nlp-parser";
 import { todayString } from "@/lib/date";
 import { parseDay, formatDay } from "@/lib/period";
+import { PrioritySlider } from "@/components/tasks/priority-slider";
 import type { Enums } from "@/lib/supabase/types";
 
-const PRIORITIES: Enums<"task_priority">[] = ["urgent", "high", "medium", "low"];
 const DOMAINS: Enums<"task_domain">[] = ["coding", "research", "writing", "life", "health", "finance", "other"];
-
-const PRIORITY_COLOR: Record<Enums<"task_priority">, string> = {
-  urgent: "!text-accent",
-  high: "!text-warning",
-  medium: "!text-foreground",
-  low: "!text-muted",
-};
 
 function addDays(day: string, delta: number): string {
   const d = parseDay(day);
@@ -160,22 +153,10 @@ export function TaskComposer({
               </div>
             </Row>
 
-            <Row icon={<Flag size={14} strokeWidth={1.5} />} label="PRIORITY">
-              <div className="flex items-center gap-1 rounded-full border border-border-visible p-1">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPriority(p)}
-                    className={`label rounded-full px-3 py-1.5 transition-mech ${
-                      priority === p ? `bg-surface-raised ${PRIORITY_COLOR[p]}` : "!text-faint hover:!text-muted"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </Row>
+            <div>
+              <span className="label mb-2 block !text-muted">PRIORITY</span>
+              <PrioritySlider value={priority} onChange={setPriority} />
+            </div>
 
             <Row icon={<Layers size={14} strokeWidth={1.5} />} label="DOMAIN">
               <select
