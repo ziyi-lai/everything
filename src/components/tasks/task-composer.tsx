@@ -36,6 +36,7 @@ export function TaskComposer({
   onOpenChange: (open: boolean) => void;
   onCreate: (input: {
     title: string;
+    description: string | null;
     tags: string[];
     due_date: string | null;
     priority: Enums<"task_priority">;
@@ -43,6 +44,7 @@ export function TaskComposer({
   }) => Promise<unknown>;
 }) {
   const [raw, setRaw] = useState("");
+  const [description, setDescription] = useState("");
   // null = follow whatever the NLP detects; a string/false = user overrode it
   const [manualDue, setManualDue] = useState<string | null | false>(false);
   const [priority, setPriority] = useState<Enums<"task_priority">>("medium");
@@ -69,9 +71,17 @@ export function TaskComposer({
     if (!title || creating) return;
     setCreating(true);
     try {
-      await onCreate({ title, tags: parsed.tags, due_date: effectiveDue, priority, domain });
+      await onCreate({
+        title,
+        description: description.trim() || null,
+        tags: parsed.tags,
+        due_date: effectiveDue,
+        priority,
+        domain,
+      });
       // reset for rapid entry (Drafts philosophy) but stay open + flash
       setRaw("");
+      setDescription("");
       setManualDue(false);
       setPriority("medium");
       setCreatedFlash(true);
@@ -125,6 +135,15 @@ export function TaskComposer({
             ))}
             {createdFlash && <span className="label !text-success">[CREATED]</span>}
           </div>
+
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Add a description… (optional)"
+            rows={2}
+            className="mt-4 w-full resize-y bg-transparent text-body-sm text-muted outline-none placeholder:text-faint"
+            style={{ minHeight: "3rem" }}
+          />
 
           <div className="mt-6 flex flex-col gap-5 border-t border-border pt-6">
             <Row icon={<Calendar size={14} strokeWidth={1.5} />} label="DUE">

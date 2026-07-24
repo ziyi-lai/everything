@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { StatusIcon } from "@/components/tasks/status-icon";
+import { EditableTitle } from "@/components/tasks/editable-title";
 import { EmptyState } from "@/components/shared/empty-state";
 import { extractTags } from "@/lib/nlp-parser";
 import type { Task } from "@/hooks/use-tasks";
@@ -11,11 +12,13 @@ export function TodayView({
   onToggleStatus,
   onCreate,
   onOpenDetail,
+  onRename,
 }: {
   tasks: Task[];
   onToggleStatus: (task: Task) => void;
   onCreate: (input: { title: string; tags: string[] }) => void;
   onOpenDetail: (task: Task) => void;
+  onRename: (task: Task, title: string) => void;
 }) {
   const [selected, setSelected] = useState(0);
   const [newTitle, setNewTitle] = useState("");
@@ -26,6 +29,13 @@ export function TodayView({
   );
 
   function onListKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    // typing in the "add task" input (or any field) shouldn't also drive the
+    // roving selection — Space was toggling whatever row was selected while
+    // the user was mid-typing a new task title
+    const target = e.target as HTMLElement;
+    const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
+    if (typing) return;
+
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelected((i) => Math.min(i + 1, sorted.length - 1));
@@ -73,13 +83,11 @@ export function TodayView({
           }`}
         >
           <StatusIcon status={task.status ?? "todo"} onClick={() => onToggleStatus(task)} />
-          <span
-            className={`flex-1 text-body transition-mech ${
-              task.status === "done" ? "text-faint line-through" : "text-foreground"
-            }`}
-          >
-            {task.title}
-          </span>
+          <EditableTitle
+            title={task.title}
+            done={task.status === "done"}
+            onSave={(value) => onRename(task, value)}
+          />
           {task.tags?.map((t) => (
             <span key={t} className="label !text-interactive">
               #{t}

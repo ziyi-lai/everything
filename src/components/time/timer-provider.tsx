@@ -1,36 +1,37 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "everything-active-timer";
-const REMINDER_KEY = "everything-timer-reminder";
+const STORAGE_KEY = "everything-active-timers";
 
 /** Minutes. null = no reminder. */
 export type ReminderMinutes = number | null;
 
-type PersistedTimer = {
+type PersistedSession = {
+  id: string;
   startedAtMs: number;
   description: string;
   linkedTaskId: string | null;
+  reminderMinutes: ReminderMinutes;
+  dismissedReminders: number;
+};
+
+export type TimerSession = PersistedSession & {
+  elapsed: number;
+  /** Set when a reminder fires; cleared by dismissReminder(id). */
+  activeReminder: number | null;
 };
 
 type TimerContextValue = {
-  running: boolean;
-  elapsed: number;
-  description: string;
-  linkedTaskId: string | null;
-  reminderMinutes: ReminderMinutes;
-  /** How many reminder intervals have already elapsed this session. */
-  remindersFired: number;
-  /** Set when a reminder fires; cleared by dismiss(). */
-  activeReminder: number | null;
-  start: (input?: { description?: string; linkedTaskId?: string | null }) => void;
-  stop: () => Promise<void>;
-  cancel: () => void;
-  setDescription: (value: string) => void;
-  setLinkedTaskId: (value: string | null) => void;
-  setReminderMinutes: (value: ReminderMinutes) => void;
-  dismissReminder: () => void;
+  /** Every timer currently running, in parallel. */
+  sessions: TimerSession[];
+  start: (input?: { description?: string; linkedTaskId?: string | null; reminderMinutes?: ReminderMinutes }) => void;
+  stop: (id: string) => Promise<void>;
+  cancel: (id: string) => void;
+  setDescription: (id: string, value: string) => void;
+  setLinkedTaskId: (id: string, value: string | null) => void;
+  setReminderMinutes: (id: string, value: ReminderMinutes) => void;
+  dismissReminder: (id: string) => void;
 };
 
 const TimerContext = createContext<TimerContextValue | null>(null);
@@ -41,23 +42,23 @@ export function useTimer() {
   return ctx;
 }
 
-function readPersisted(): PersistedTimer | null {
+function readPersisted(): PersistedSession[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as PersistedTimer) : null;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function readReminder(): ReminderMinutes {
+function persist(sessions: PersistedSession[]) {
   try {
-    const raw = localStorage.getItem(REMINDER_KEY);
-    if (raw === null || raw === "null") return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    if (sessions.length) localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    return null;
+    // storage unavailable — timers still work for this page view
   }
 }
 
@@ -74,149 +75,119 @@ export function TimerProvider({
     linkedTaskId: string | null;
   }) => Promise<unknown>;
 }) {
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
-  const [description, setDescriptionState] = useState("");
-  const [linkedTaskId, setLinkedTaskIdState] = useState<string | null>(null);
-  const [elapsed, setElapsed] = useState(0);
-  const [reminderMinutes, setReminderMinutesState] = useState<ReminderMinutes>(null);
-  // Reminders are derived from elapsed time rather than tracked as their own
-  // state — the only thing worth storing is how many the user has dismissed.
-  const [dismissedReminders, setDismissedReminders] = useState(0);
-  const [hydrated, setHydrated] = useState(false);
+  const [raw, setRaw] = useState<PersistedSession[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  const notifiedRef = useRef(new Set<string>());
 
-  // Restore a timer that was running before a refresh / route change.
+  // Restore any timers that were running before a refresh / route change.
   // Deferred with setTimeout so it isn't a synchronous setState in an effect.
   useEffect(() => {
-    const id = setTimeout(() => {
-      const persisted = readPersisted();
-      if (persisted) {
-        setStartedAtMs(persisted.startedAtMs);
-        setDescriptionState(persisted.description);
-        setLinkedTaskIdState(persisted.linkedTaskId);
-        // reminders that passed while the tab was away shouldn't all pop at once
-        const mins = readReminder();
-        if (mins) {
-          const elapsedMin = (Date.now() - persisted.startedAtMs) / 60000;
-          setDismissedReminders(Math.floor(elapsedMin / mins));
-        }
-      }
-      setReminderMinutesState(readReminder());
-      setHydrated(true);
-    }, 0);
+    const id = setTimeout(() => setRaw(readPersisted()), 0);
     return () => clearTimeout(id);
   }, []);
 
-  const running = startedAtMs !== null;
-
   useEffect(() => {
-    if (!running) return;
-    const tick = () => setElapsed(Math.floor((Date.now() - startedAtMs!) / 1000));
+    if (raw.length === 0) return;
+    const tick = () => setNow(Date.now());
     const initial = setTimeout(tick, 0);
     const interval = setInterval(tick, 1000);
     return () => {
       clearTimeout(initial);
       clearInterval(interval);
     };
-  }, [running, startedAtMs]);
+  }, [raw.length]);
 
-  // How many whole reminder intervals have elapsed, and whether one is
-  // outstanding. Both fall straight out of `elapsed` — no bookkeeping.
-  const dueReminders = running && reminderMinutes ? Math.floor(elapsed / (reminderMinutes * 60)) : 0;
-  const activeReminder =
-    reminderMinutes && dueReminders > dismissedReminders ? dueReminders * reminderMinutes : null;
+  const sessions: TimerSession[] = raw.map((s) => {
+    const elapsed = Math.floor((now - s.startedAtMs) / 1000);
+    const dueReminders = s.reminderMinutes ? Math.floor(elapsed / (s.reminderMinutes * 60)) : 0;
+    const activeReminder =
+      s.reminderMinutes && dueReminders > s.dismissedReminders ? dueReminders * s.reminderMinutes : null;
+    return { ...s, elapsed, activeReminder };
+  });
 
-  // One OS notification per newly-crossed interval: the dep list means this
-  // runs exactly once each time `dueReminders` increments. `notify` reads the
-  // description from storage rather than taking it as a dep, which would
-  // re-fire the notification on every keystroke.
+  // One OS notification per newly-crossed reminder interval, per session —
+  // de-duped via a ref so re-renders don't re-fire the same notification.
   useEffect(() => {
-    if (dueReminders === 0 || !reminderMinutes) return;
-    notify(dueReminders * reminderMinutes);
-  }, [dueReminders, reminderMinutes]);
-
-  function persist(next: PersistedTimer | null) {
-    try {
-      if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // storage unavailable — timer still works for this page view
+    for (const s of sessions) {
+      if (s.activeReminder === null) continue;
+      const key = `${s.id}:${s.activeReminder}`;
+      if (notifiedRef.current.has(key)) continue;
+      notifiedRef.current.add(key);
+      notify(s.activeReminder, s.description);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- de-duped via notifiedRef, not deps
+  }, [sessions.map((s) => `${s.id}:${s.activeReminder}`).join(",")]);
+
+  function update(id: string, patch: Partial<PersistedSession>) {
+    setRaw((cur) => {
+      const next = cur.map((s) => (s.id === id ? { ...s, ...patch } : s));
+      persist(next);
+      return next;
+    });
   }
 
-  function start(input?: { description?: string; linkedTaskId?: string | null }) {
-    const now = Date.now();
-    const nextDescription = input?.description ?? description;
-    const nextTask = input?.linkedTaskId !== undefined ? input.linkedTaskId : linkedTaskId;
-    setStartedAtMs(now);
-    setDescriptionState(nextDescription);
-    setLinkedTaskIdState(nextTask);
-    setElapsed(0);
-    setDismissedReminders(0);
-    persist({ startedAtMs: now, description: nextDescription, linkedTaskId: nextTask });
+  function start(input?: { description?: string; linkedTaskId?: string | null; reminderMinutes?: ReminderMinutes }) {
+    const session: PersistedSession = {
+      id: crypto.randomUUID(),
+      startedAtMs: Date.now(),
+      description: input?.description ?? "",
+      linkedTaskId: input?.linkedTaskId ?? null,
+      reminderMinutes: input?.reminderMinutes ?? null,
+      dismissedReminders: 0,
+    };
+    setRaw((cur) => {
+      const next = [...cur, session];
+      persist(next);
+      return next;
+    });
     requestNotificationPermission();
   }
 
-  function reset() {
-    setStartedAtMs(null);
-    setElapsed(0);
-    setDescriptionState("");
-    setLinkedTaskIdState(null);
-    setDismissedReminders(0);
-    persist(null);
-  }
-
-  async function stop() {
-    if (startedAtMs === null) return;
+  async function stop(id: string) {
+    const s = raw.find((x) => x.id === id);
+    if (!s) return;
     const endTime = new Date();
-    const startTime = new Date(startedAtMs);
-    const durationSeconds = Math.max(1, Math.round((endTime.getTime() - startedAtMs) / 1000));
-    const payload = {
-      description: description.trim() || "Untitled session",
+    const startTime = new Date(s.startedAtMs);
+    const durationSeconds = Math.max(1, Math.round((endTime.getTime() - s.startedAtMs) / 1000));
+    setRaw((cur) => {
+      const next = cur.filter((x) => x.id !== id);
+      persist(next);
+      return next;
+    });
+    await onSave({
+      description: s.description.trim() || "Untitled session",
       startTime,
       endTime,
       durationSeconds,
-      linkedTaskId,
-    };
-    reset();
-    await onSave(payload);
+      linkedTaskId: s.linkedTaskId,
+    });
   }
 
-  function setReminderMinutes(value: ReminderMinutes) {
-    setReminderMinutesState(value);
-    try {
-      localStorage.setItem(REMINDER_KEY, value === null ? "null" : String(value));
-    } catch {
-      // preference just won't persist
-    }
+  function cancel(id: string) {
+    setRaw((cur) => {
+      const next = cur.filter((x) => x.id !== id);
+      persist(next);
+      return next;
+    });
   }
 
-  function setDescription(value: string) {
-    setDescriptionState(value);
-    if (startedAtMs !== null) persist({ startedAtMs, description: value, linkedTaskId });
-  }
-
-  function setLinkedTaskId(value: string | null) {
-    setLinkedTaskIdState(value);
-    if (startedAtMs !== null) persist({ startedAtMs, description, linkedTaskId: value });
+  function dismissReminder(id: string) {
+    const s = sessions.find((x) => x.id === id);
+    if (!s || !s.reminderMinutes) return;
+    update(id, { dismissedReminders: Math.floor(s.elapsed / (s.reminderMinutes * 60)) });
   }
 
   return (
     <TimerContext.Provider
       value={{
-        running: hydrated && running,
-        elapsed,
-        description,
-        linkedTaskId,
-        reminderMinutes,
-        remindersFired: dueReminders,
-        activeReminder,
+        sessions,
         start,
         stop,
-        cancel: reset,
-        setDescription,
-        setLinkedTaskId,
-        setReminderMinutes,
-        dismissReminder: () => setDismissedReminders(dueReminders),
+        cancel,
+        setDescription: (id, value) => update(id, { description: value }),
+        setLinkedTaskId: (id, value) => update(id, { linkedTaskId: value }),
+        setReminderMinutes: (id, value) => update(id, { reminderMinutes: value }),
+        dismissReminder,
       }}
     >
       {children}
@@ -230,11 +201,11 @@ function requestNotificationPermission() {
   if (Notification.permission === "default") void Notification.requestPermission();
 }
 
-function notify(minutes: number) {
+function notify(minutes: number, description: string) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
     new Notification(`${minutes} MIN ELAPSED`, {
-      body: readPersisted()?.description?.trim() || "Timer still running.",
+      body: description.trim() || "Timer still running.",
       tag: "everything-timer",
     });
   } catch {

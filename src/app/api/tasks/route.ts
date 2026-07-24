@@ -23,9 +23,8 @@ export async function GET(request: NextRequest) {
 
   if (view === "today") {
     const today = todayString();
-    query = query
-      .in("status", ["todo", "in_progress"])
-      .or(`due_date.eq.${today},priority.in.(urgent,high)`);
+    // due today or overdue — matches the client-side "Today" filter
+    query = query.in("status", ["todo", "in_progress"]).lte("due_date", today);
   }
 
   const { data, error } = await query;

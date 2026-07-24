@@ -3,6 +3,7 @@ import { Zap, CheckSquare, Wallet, Activity, BookOpen, Timer } from "lucide-reac
 import { createClient } from "@/lib/supabase/server";
 import { DomainCard } from "@/components/dashboard/domain-card";
 import { LiveClock } from "@/components/shared/live-clock";
+import { WeatherWidget } from "@/components/dashboard/weather-widget";
 import { StatusIcon } from "@/components/tasks/status-icon";
 import { EmptyState } from "@/components/shared/empty-state";
 import { todayString, hoursAgoIso } from "@/lib/date";
@@ -17,7 +18,7 @@ export default async function DashboardPage() {
   const today = todayString();
   const monthStart = `${today.slice(0, 7)}-01`;
 
-  const [captures, tasksCount, monthTransactions, notes, todayTasks, recentSessions] =
+  const [captures, tasksCount, doneTodayCandidates, monthTransactions, notes, todayTasks, recentSessions] =
     await Promise.all([
       // is_timer:false — timer sessions live in their own module and are never
       // "processed", so counting them here would inflate the inbox badge
@@ -27,13 +28,17 @@ export default async function DashboardPage() {
         .eq("processed", false)
         .eq("is_timer", false),
       supabase.from("tasks").select("id", { count: "exact", head: true }).in("status", ["todo", "in_progress"]),
+      // fetched as a wide UTC window and filtered by APP_TIMEZONE below —
+      // a UTC date-boundary filter here would miscount tasks completed near
+      // local midnight (same reasoning as recentSessions further down)
+      supabase.from("tasks").select("completed_at").eq("status", "done").gte("completed_at", hoursAgoIso(48)),
       supabase.from("transactions").select("type, amount").gte("transaction_date", monthStart),
       supabase.from("notes").select("id", { count: "exact", head: true }),
       supabase
         .from("tasks")
         .select("*")
         .in("status", ["todo", "in_progress"])
-        .or(`due_date.eq.${today},priority.in.(urgent,high)`)
+        .lte("due_date", today)
         .order("due_date", { ascending: true })
         .limit(5),
       supabase
@@ -54,6 +59,10 @@ export default async function DashboardPage() {
     .filter((s) => s.start_time && todayString(new Date(s.start_time)) === today)
     .reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0);
 
+  const doneTodayCount = (doneTodayCandidates.data ?? []).filter(
+    (t) => t.completed_at && todayString(new Date(t.completed_at)) === today
+  ).length;
+
   const displayName = user?.email?.split("@")[0]?.toUpperCase() ?? "THERE";
 
   return (
@@ -62,7 +71,10 @@ export default async function DashboardPage() {
         <h1 className="font-display text-display-md text-hero" style={{ letterSpacing: "-0.02em" }}>
           GOOD DAY, {displayName}
         </h1>
-        <LiveClock />
+        <div className="flex items-center gap-6">
+          <WeatherWidget />
+          <LiveClock />
+        </div>
       </header>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -117,7 +129,12 @@ export default async function DashboardPage() {
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <span className="label">TODAY&rsquo;S TASKS</span>
+          <div className="flex items-center gap-3">
+            <span className="label">TODAY&rsquo;S TASKS</span>
+            {doneTodayCount > 0 && (
+              <span className="label !text-success">{doneTodayCount} DONE TODAY</span>
+            )}
+          </div>
           <Link href="/tasks" className="label transition-mech hover:!text-foreground">
             VIEW ALL →
           </Link>

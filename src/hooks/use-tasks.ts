@@ -34,7 +34,9 @@ export function useTasks(filter?: { status?: string; view?: "today" }) {
   async function createTask(input: { title: string } & Record<string, unknown>) {
     const res = await fetch("/api/tasks", { method: "POST", body: JSON.stringify(input) });
     const data = await res.json();
-    await refetch();
+    // merge the created row locally instead of a full refetch — halves the
+    // round trips on every mutation, which was the main source of lag
+    if (data.task) setTasks((prev) => [data.task as Task, ...prev]);
     return data.task as Task;
   }
 
@@ -44,14 +46,13 @@ export function useTasks(filter?: { status?: string; view?: "today" }) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
     const res = await fetch(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
     const data = await res.json();
-    await refetch();
+    if (data.task) setTasks((prev) => prev.map((t) => (t.id === id ? (data.task as Task) : t)));
     return data.task as Task;
   }
 
   async function deleteTask(id: string) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-    await refetch();
   }
 
   return { tasks, loading, refetch, createTask, updateTask, deleteTask };

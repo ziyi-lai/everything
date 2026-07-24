@@ -34,20 +34,23 @@ export function useCaptures(filter?: { processed?: boolean; is_timer?: boolean }
   async function createCapture(input: { raw_text: string } & Record<string, unknown>) {
     const res = await fetch("/api/captures", { method: "POST", body: JSON.stringify(input) });
     const data = await res.json();
-    await refetch();
+    // merge locally instead of a full refetch — halves the round trips on
+    // every mutation, which was the main source of lag
+    if (data.capture) setCaptures((prev) => [data.capture as Capture, ...prev]);
     return data.capture as Capture;
   }
 
   async function updateCapture(id: string, patch: Record<string, unknown>) {
+    setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
     const res = await fetch(`/api/captures/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
     const data = await res.json();
-    await refetch();
+    if (data.capture) setCaptures((prev) => prev.map((c) => (c.id === id ? (data.capture as Capture) : c)));
     return data.capture as Capture;
   }
 
   async function deleteCapture(id: string) {
+    setCaptures((prev) => prev.filter((c) => c.id !== id));
     await fetch(`/api/captures/${id}`, { method: "DELETE" });
-    await refetch();
   }
 
   return { captures, loading, refetch, createCapture, updateCapture, deleteCapture };

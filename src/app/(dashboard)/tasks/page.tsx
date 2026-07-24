@@ -37,11 +37,11 @@ export default function TasksPage() {
 
   const todayTasks = useMemo(() => {
     const today = todayString();
+    // due today or overdue — a task merely marked high-priority with a due
+    // date next week doesn't belong in "Today"
     return tasks.filter((t) => {
       if (t.status !== "todo" && t.status !== "in_progress") return false;
-      const dueToday = t.due_date === today;
-      const highPriority = t.priority === "urgent" || t.priority === "high";
-      return dueToday || highPriority;
+      return !!t.due_date && t.due_date <= today;
     });
   }, [tasks]);
 
@@ -60,6 +60,10 @@ export default function TasksPage() {
   function handleQuickAdd(input: { title: string; tags: string[] }) {
     // quick-add lives inside the Today view — an item typed here is implicitly "for today"
     createTask({ title: input.title, tags: input.tags, due_date: todayString() });
+  }
+
+  function handleRename(task: Task, title: string) {
+    updateTask(task.id, { title });
   }
 
   return (
@@ -106,6 +110,7 @@ export default function TasksPage() {
           onToggleStatus={handleToggleStatus}
           onCreate={handleQuickAdd}
           onOpenDetail={(t) => setDetailTaskId(t.id)}
+          onRename={handleRename}
         />
       )}
 
@@ -114,6 +119,7 @@ export default function TasksPage() {
           tasks={listTasks}
           onToggleStatus={handleToggleStatus}
           onOpenDetail={(t) => setDetailTaskId(t.id)}
+          onRename={handleRename}
         />
       )}
 

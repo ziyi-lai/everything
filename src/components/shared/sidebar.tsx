@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { SignOutButton } from "@/components/shared/sign-out-button";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
-import { QuickTimer } from "@/components/time/quick-timer";
 
 const NAV_ITEMS = [
   { href: "/", label: "DASHBOARD", icon: LayoutGrid },
@@ -57,8 +56,6 @@ export function Sidebar({ email }: { email: string | undefined }) {
           );
         })}
       </nav>
-
-      <QuickTimer />
 
       <button
         type="button"

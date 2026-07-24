@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { StatusIcon } from "@/components/tasks/status-icon";
+import { EditableTitle } from "@/components/tasks/editable-title";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { Task } from "@/hooks/use-tasks";
 import type { Enums } from "@/lib/supabase/types";
@@ -16,14 +17,21 @@ const PRIORITY_COLOR: Record<Enums<"task_priority">, string> = {
   low: "text-faint",
 };
 
-export function ListView({ tasks, onToggleStatus, onOpenDetail }: {
+const SORTS = ["priority", "due", "title", "created"] as const;
+type SortBy = (typeof SORTS)[number];
+const SORT_LABEL: Record<SortBy, string> = { priority: "PRIORITY", due: "DUE DATE", title: "TITLE", created: "CREATED" };
+const PRIORITY_ORDER: Record<Enums<"task_priority">, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+export function ListView({ tasks, onToggleStatus, onOpenDetail, onRename }: {
   tasks: Task[];
   onToggleStatus: (task: Task) => void;
   onOpenDetail: (task: Task) => void;
+  onRename: (task: Task, title: string) => void;
 }) {
   const [domain, setDomain] = useState<string>("all");
   const [priority, setPriority] = useState<string>("all");
   const [tag, setTag] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>("priority");
 
   const allTags = useMemo(
     () => [...new Set(tasks.flatMap((t) => t.tags ?? []))].sort(),
@@ -37,10 +45,20 @@ export function ListView({ tasks, onToggleStatus, onOpenDetail }: {
       .filter((t) => !tag || t.tags?.includes(tag))
       .sort((a, b) => {
         if ((a.status === "done") !== (b.status === "done")) return a.status === "done" ? 1 : -1;
-        const order = { urgent: 0, high: 1, medium: 2, low: 3 };
-        return (order[a.priority ?? "medium"] ?? 2) - (order[b.priority ?? "medium"] ?? 2);
+        if (sortBy === "priority") {
+          return (PRIORITY_ORDER[a.priority ?? "medium"] ?? 2) - (PRIORITY_ORDER[b.priority ?? "medium"] ?? 2);
+        }
+        if (sortBy === "due") {
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return 1; // no date sorts last
+          if (!b.due_date) return -1;
+          return a.due_date.localeCompare(b.due_date);
+        }
+        if (sortBy === "title") return a.title.localeCompare(b.title);
+        // created: newest first
+        return (b.created_at ?? "").localeCompare(a.created_at ?? "");
       });
-  }, [tasks, domain, priority, tag]);
+  }, [tasks, domain, priority, tag, sortBy]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,6 +114,19 @@ export function ListView({ tasks, onToggleStatus, onOpenDetail }: {
             #{t}
           </button>
         ))}
+
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SortBy)}
+          aria-label="Sort by"
+          className="label ml-auto rounded-full border border-border-visible bg-transparent px-3 py-1.5 text-foreground outline-none"
+        >
+          {SORTS.map((s) => (
+            <option key={s} value={s} className="bg-surface text-foreground">
+              SORT: {SORT_LABEL[s]}
+            </option>
+          ))}
+        </select>
       </div>
 
       {filtered.length === 0 ? (
@@ -109,13 +140,11 @@ export function ListView({ tasks, onToggleStatus, onOpenDetail }: {
               className="flex cursor-pointer items-center gap-3 border-b border-border py-3 transition-mech hover:bg-surface"
             >
               <StatusIcon status={task.status ?? "todo"} onClick={() => onToggleStatus(task)} />
-              <span
-                className={`flex-1 text-body transition-mech ${
-                  task.status === "done" ? "text-faint line-through" : "text-foreground"
-                }`}
-              >
-                {task.title}
-              </span>
+              <EditableTitle
+                title={task.title}
+                done={task.status === "done"}
+                onSave={(value) => onRename(task, value)}
+              />
               <span className="label !text-faint">{task.domain}</span>
               {task.priority && task.priority !== "medium" && (
                 <span className={`label ${PRIORITY_COLOR[task.priority]}`}>{task.priority}</span>

@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, Trash2 } from "lucide-react";
 import { TagInput } from "@/components/tasks/tag-input";
 import { PrioritySlider } from "@/components/tasks/priority-slider";
+import { TaskAttachments } from "@/components/tasks/task-attachments";
 import type { Task } from "@/hooks/use-tasks";
 import type { Enums } from "@/lib/supabase/types";
 
@@ -51,6 +52,7 @@ export function TaskDetail({
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                onFocus={(e) => e.target.select()}
                 onBlur={() => title.trim() && title !== task.title && save({ title: title.trim() })}
                 className="flex-1 bg-transparent text-heading text-hero outline-none"
               />
@@ -66,7 +68,8 @@ export function TaskDetail({
             onBlur={() => description !== (task.description ?? "") && save({ description: description || null })}
             placeholder="Add a description…"
             rows={2}
-            className="mt-4 w-full resize-none bg-transparent text-body-sm text-muted outline-none placeholder:text-faint"
+            className="mt-4 w-full resize-y bg-transparent text-body-sm text-muted outline-none placeholder:text-faint"
+            style={{ minHeight: "3rem" }}
           />
 
           <div className="mt-6 flex flex-col gap-5">
@@ -115,6 +118,8 @@ export function TaskDetail({
             <Field label="TAGS">
               <TagInput tags={task.tags ?? []} onChange={(tags) => save({ tags })} />
             </Field>
+
+            <TaskAttachments taskId={task.id} />
           </div>
 
           <div className="mt-8 flex items-center justify-between border-t border-border pt-4">

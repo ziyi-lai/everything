@@ -96,6 +96,11 @@
 @layer base {
   * {
     border-color: var(--border);
+    /* thin, monochrome scrollbar — matches the instrument-panel aesthetic
+       instead of the OS default; Firefox via scrollbar-color, everything
+       else via the ::-webkit-scrollbar rules below */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-visible) transparent;
   }
   html {
     background: var(--black);
@@ -107,6 +112,22 @@
   ::selection {
     background: var(--accent);
     color: var(--text-display);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-visible);
+    border-radius: 8px;
+    border: 2px solid var(--surface);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-secondary);
   }
 }
 
@@ -133,5 +154,21 @@
   .transition-mech {
     transition-timing-function: var(--ease-out-mech);
     transition-duration: 200ms;
+  }
+
+  /* A capture landing in the stream gets one sharp flash, not a bounce —
+     the reward cue stays inside the mechanical/percussive design language */
+  @keyframes capture-pop {
+    from {
+      background-color: var(--accent-subtle);
+      border-color: var(--accent);
+    }
+    to {
+      background-color: transparent;
+      border-color: var(--border-visible);
+    }
+  }
+  .capture-pop {
+    animation: capture-pop 900ms var(--ease-out-mech) forwards;
   }
 }
