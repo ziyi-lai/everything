@@ -29,7 +29,7 @@ export function Sidebar({ email }: { email: string | undefined }) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border px-6 py-8">
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border px-6 py-8">
       <Link href="/" className="mb-12 block">
         <span className="font-display text-heading text-hero" style={{ letterSpacing: "-0.01em" }}>
           EVERYTHING
