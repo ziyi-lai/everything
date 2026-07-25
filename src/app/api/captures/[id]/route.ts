@@ -61,6 +61,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const { data: existing } = await supabase.from("captures").select("audio_path").eq("id", id).single();
+  if (existing?.audio_path) {
+    await supabase.storage.from("voice-captures").remove([existing.audio_path]);
+  }
+
   const { error } = await supabase.from("captures").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });

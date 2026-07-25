@@ -6,6 +6,8 @@ import { X, Trash2 } from "lucide-react";
 import { TagInput } from "@/components/tasks/tag-input";
 import { PrioritySlider } from "@/components/tasks/priority-slider";
 import { TaskAttachments } from "@/components/tasks/task-attachments";
+import { TaskComments } from "@/components/tasks/task-comments";
+import { Markdown } from "@/components/shared/markdown";
 import type { Task } from "@/hooks/use-tasks";
 import type { Enums } from "@/lib/supabase/types";
 
@@ -28,6 +30,7 @@ export function TaskDetail({
   // needs to seed state once per task rather than re-sync on every render
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
+  const [editingDescription, setEditingDescription] = useState(false);
   const [saved, setSaved] = useState(false);
 
   if (!task) return null;
@@ -46,13 +49,12 @@ export function TaskDetail({
     <Dialog.Root open={!!task} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 transition-mech" style={{ background: "rgba(0,0,0,0.8)" }} />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border-visible bg-surface p-6 transition-mech">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-full max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border-visible bg-surface p-6 transition-mech">
           <div className="flex items-start justify-between gap-4">
             <Dialog.Title asChild>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                onFocus={(e) => e.target.select()}
                 onBlur={() => title.trim() && title !== task.title && save({ title: title.trim() })}
                 className="flex-1 bg-transparent text-heading text-hero outline-none"
               />
@@ -62,15 +64,33 @@ export function TaskDetail({
             </Dialog.Close>
           </div>
 
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => description !== (task.description ?? "") && save({ description: description || null })}
-            placeholder="Add a description…"
-            rows={2}
-            className="mt-4 w-full resize-y bg-transparent text-body-sm text-muted outline-none placeholder:text-faint"
-            style={{ minHeight: "3rem" }}
-          />
+          {editingDescription ? (
+            <textarea
+              autoFocus
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => {
+                setEditingDescription(false);
+                if (description !== (task.description ?? "")) save({ description: description || null });
+              }}
+              placeholder="Add a description…"
+              rows={2}
+              className="mt-4 w-full resize-y bg-transparent text-body-sm text-muted outline-none placeholder:text-faint"
+              style={{ minHeight: "3rem" }}
+            />
+          ) : description ? (
+            <button type="button" onClick={() => setEditingDescription(true)} className="mt-4 w-full text-left">
+              <Markdown text={description} className="!text-body-sm !text-muted" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingDescription(true)}
+              className="mt-4 text-body-sm text-faint"
+            >
+              Add a description…
+            </button>
+          )}
 
           <div className="mt-6 flex flex-col gap-5">
             <Field label="STATUS">
@@ -120,6 +140,8 @@ export function TaskDetail({
             </Field>
 
             <TaskAttachments taskId={task.id} />
+
+            <TaskComments taskId={task.id} />
           </div>
 
           <div className="mt-8 flex items-center justify-between border-t border-border pt-4">

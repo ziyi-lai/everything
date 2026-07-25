@@ -19,7 +19,7 @@ export default function TasksPage() {
   const [tab, setTab] = useState<Tab>("TODAY");
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
-  const { tasks, updateTask, createTask, deleteTask } = useTasks();
+  const { tasks, loading, updateTask, createTask, deleteTask } = useTasks();
 
   // N opens the composer from anywhere on the page (unless typing in a field)
   useEffect(() => {
@@ -104,27 +104,33 @@ export default function TasksPage() {
         </div>
       </header>
 
-      {tab === "TODAY" && (
-        <TodayView
-          tasks={todayTasks}
-          onToggleStatus={handleToggleStatus}
-          onCreate={handleQuickAdd}
-          onOpenDetail={(t) => setDetailTaskId(t.id)}
-          onRename={handleRename}
-        />
-      )}
+      {loading ? (
+        <p className="label !text-faint">LOADING…</p>
+      ) : (
+        <>
+          {tab === "TODAY" && (
+            <TodayView
+              tasks={todayTasks}
+              onToggleStatus={handleToggleStatus}
+              onCreate={handleQuickAdd}
+              onOpenDetail={(t) => setDetailTaskId(t.id)}
+              onRename={handleRename}
+            />
+          )}
 
-      {tab === "LIST" && (
-        <ListView
-          tasks={listTasks}
-          onToggleStatus={handleToggleStatus}
-          onOpenDetail={(t) => setDetailTaskId(t.id)}
-          onRename={handleRename}
-        />
-      )}
+          {tab === "LIST" && (
+            <ListView
+              tasks={listTasks}
+              onToggleStatus={handleToggleStatus}
+              onOpenDetail={(t) => setDetailTaskId(t.id)}
+              onRename={handleRename}
+            />
+          )}
 
-      {tab === "BOARD" && (
-        <BoardView tasks={boardTasks} onMove={handleMove} onOpenDetail={(t) => setDetailTaskId(t.id)} />
+          {tab === "BOARD" && (
+            <BoardView tasks={boardTasks} onMove={handleMove} onOpenDetail={(t) => setDetailTaskId(t.id)} />
+          )}
+        </>
       )}
 
       <TaskComposer

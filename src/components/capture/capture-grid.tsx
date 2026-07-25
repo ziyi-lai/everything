@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { CheckSquare, Archive, Trash2, Link2, Sparkles } from "lucide-react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { CheckSquare, Archive, Trash2, Link2, Sparkles, Pencil } from "lucide-react";
 import type { Capture } from "@/hooks/use-captures";
 import type { Task } from "@/hooks/use-tasks";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TaskLinkPicker } from "@/components/shared/task-link-picker";
+import { Markdown } from "@/components/shared/markdown";
+import { createClient } from "@/lib/supabase/client";
 
 /** A wall of sticky notes — masonry via CSS columns, no library needed. */
 export function CaptureGrid({
@@ -17,6 +19,7 @@ export function CaptureGrid({
   onLink,
   onArchive,
   onDelete,
+  onEdit,
 }: {
   captures: Capture[];
   tasks: Task[];
@@ -26,8 +29,33 @@ export function CaptureGrid({
   onLink: (capture: Capture, task: Task) => void;
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (capture: Capture, text: string) => void;
 }) {
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+
+  function startEditing(c: Capture) {
+    setEditingId(c.id);
+    setDraftText(c.parsed_title || c.raw_text);
+  }
+
+  function commitEdit(c: Capture) {
+    setEditingId(null);
+    const trimmed = draftText.trim();
+    if (trimmed && trimmed !== (c.parsed_title || c.raw_text)) onEdit(c, trimmed);
+  }
+
+  function onEditKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, c: Capture) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+    if (e.key === "Escape") {
+      setEditingId(null);
+      setDraftText(c.parsed_title || c.raw_text);
+    }
+  }
 
   // the resurfaced note might be outside the current triage filter (usually
   // already processed) — pin it into the wall anyway rather than duplicate
@@ -62,13 +90,31 @@ export function CaptureGrid({
               </span>
             )}
 
-            <p className={`whitespace-pre-wrap text-body ${c.processed ? "text-muted" : "text-foreground"}`}>
-              {c.parsed_title || c.raw_text}
-            </p>
+            {editingId === c.id ? (
+              <textarea
+                autoFocus
+                value={draftText}
+                onChange={(e) => setDraftText(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                onBlur={() => commitEdit(c)}
+                onKeyDown={(e) => onEditKeyDown(e, c)}
+                rows={3}
+                className="w-full resize-y bg-transparent text-body text-foreground outline-none"
+              />
+            ) : (
+              <Markdown text={c.parsed_title || c.raw_text} className={c.processed ? "!text-muted" : ""} />
+            )}
+
+            {c.audio_path && <VoiceCapturePlayer path={c.audio_path} />}
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="label !text-faint">
-                {new Date(c.created_at ?? "").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {new Date(c.created_at ?? "").toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </span>
               {c.parsed_due && (
                 <span className="label !text-warning">
@@ -84,6 +130,9 @@ export function CaptureGrid({
             </div>
 
             <div className="flex items-center gap-1 border-t border-border pt-2 opacity-0 transition-mech group-hover:opacity-100">
+              <IconButton label="Edit" onClick={() => startEditing(c)}>
+                <Pencil size={15} strokeWidth={1.5} />
+              </IconButton>
               {!c.processed && (
                 <IconButton label="Convert to task" onClick={() => onConvert(c)}>
                   <CheckSquare size={15} strokeWidth={1.5} />
@@ -120,6 +169,23 @@ export function CaptureGrid({
       })}
     </div>
   );
+}
+
+function VoiceCapturePlayer({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // deferred via setTimeout rather than called synchronously in the effect body
+    const id = setTimeout(async () => {
+      const supabase = createClient();
+      const { data } = await supabase.storage.from("voice-captures").createSignedUrl(path, 3600);
+      setUrl(data?.signedUrl ?? null);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [path]);
+
+  if (!url) return null;
+  return <audio controls src={url} className="h-8 w-full" />;
 }
 
 function IconButton({

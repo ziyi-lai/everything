@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { parseCapture } from "@/lib/nlp-parser";
+import { VoiceRecordButton } from "@/components/capture/voice-record-button";
 
 function chipDate(due: Date): string {
   const date = due.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
@@ -18,7 +19,13 @@ function chipDate(due: Date): string {
  * A single-line pill by default — grows only as far as the content needs,
  * instead of permanently reserving a hero block's worth of vertical space.
  */
-export function QuickAdd({ onCapture }: { onCapture: (rawText: string) => Promise<void> | void }) {
+export function QuickAdd({
+  onCapture,
+  onVoiceCapture,
+}: {
+  onCapture: (rawText: string) => Promise<void> | void;
+  onVoiceCapture: (audioPath: string) => Promise<void> | void;
+}) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -64,17 +71,20 @@ export function QuickAdd({ onCapture }: { onCapture: (rawText: string) => Promis
         expanded ? "border-border-visible bg-surface px-5 py-4" : "border-border bg-surface px-5 py-3"
       }`}
     >
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={onKeyDown}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder="Capture a thought…"
-        rows={1}
-        className="w-full resize-none overflow-hidden bg-transparent text-body text-foreground outline-none transition-mech placeholder:text-faint"
-      />
+      <div className="flex items-start gap-2">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Capture a thought…"
+          rows={1}
+          className="w-full flex-1 resize-none overflow-hidden bg-transparent text-body text-foreground outline-none transition-mech placeholder:text-faint"
+        />
+        <VoiceRecordButton onRecorded={onVoiceCapture} />
+      </div>
 
       {expanded && (parsed?.due || parsed?.project || (parsed?.tags.length ?? 0) > 0 || true) && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

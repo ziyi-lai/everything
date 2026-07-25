@@ -42,6 +42,19 @@ export default function CapturePage() {
     allCaptures.refetch();
   }
 
+  async function handleVoiceCapture(audioPath: string) {
+    const created = await inbox.createCapture({
+      raw_text: "🎙️ Voice memo",
+      source: "voice",
+      audio_path: audioPath,
+    });
+    if (created?.id) {
+      setJustCapturedId(created.id);
+      setTimeout(() => setJustCapturedId(null), 900);
+    }
+    allCaptures.refetch();
+  }
+
   async function handleConvert(capture: Capture) {
     const task = await createTask({
       title: capture.parsed_title || capture.raw_text,
@@ -56,6 +69,10 @@ export default function CapturePage() {
     await inbox.updateCapture(capture.id, { processed: true, converted_to_task_id: task.id });
   }
 
+  async function handleEdit(capture: Capture, text: string) {
+    await inbox.updateCapture(capture.id, { raw_text: text, parsed_title: null });
+  }
+
   // delete is the only inbox action that can change the streak/heatmap/resurface pool
   async function handleDelete(id: string) {
     await inbox.deleteCapture(id);
@@ -65,13 +82,15 @@ export default function CapturePage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-display text-display-md text-hero" style={{ letterSpacing: "-0.02em" }}>
-          CAPTURE
-        </h1>
+        <div>
+          <h1 className="font-display text-display-md text-hero" style={{ letterSpacing: "-0.02em" }}>
+            CAPTURE
+          </h1>
+        </div>
         <CaptureHeatmap captures={allCaptures.captures} />
       </header>
 
-      <QuickAdd onCapture={handleCapture} />
+      <QuickAdd onCapture={handleCapture} onVoiceCapture={handleVoiceCapture} />
 
       <div className="flex items-center justify-between gap-4">
         <span className="label">
@@ -94,16 +113,21 @@ export default function CapturePage() {
         </div>
       </div>
 
-      <CaptureGrid
-        captures={inbox.captures}
-        tasks={tasks}
-        resurfaceCapture={resurfaceCapture}
-        justCapturedId={justCapturedId}
-        onConvert={handleConvert}
-        onLink={handleLink}
-        onArchive={(id) => inbox.updateCapture(id, { processed: true })}
-        onDelete={handleDelete}
-      />
+      {inbox.loading ? (
+        <p className="label !text-faint">LOADING…</p>
+      ) : (
+        <CaptureGrid
+          captures={inbox.captures}
+          tasks={tasks}
+          resurfaceCapture={resurfaceCapture}
+          justCapturedId={justCapturedId}
+          onConvert={handleConvert}
+          onLink={handleLink}
+          onArchive={(id) => inbox.updateCapture(id, { processed: true })}
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+        />
+      )}
     </div>
   );
 }

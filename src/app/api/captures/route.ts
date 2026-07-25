@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     user_id: user.id,
     raw_text: rawText,
     source: body.source ?? "text",
+    audio_path: body.audio_path ?? null,
   };
 
   if (body.is_timer) {

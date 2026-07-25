@@ -15,7 +15,9 @@ const CJK_RE = /[一-鿿]/;
 // Used by quick-add inputs (Today view) that don't need the full NLP pass.
 export function extractTags(raw: string): { title: string; tags: string[] } {
   const tags = [...raw.matchAll(TAG_RE)].map((m) => m[1]);
-  const title = raw.replace(TAG_RE, "").replace(/\s+/g, " ").trim();
+  // collapse horizontal whitespace only — a bare \s+ was swallowing the
+  // newlines a user typed, so multi-line captures displayed as one line
+  const title = raw.replace(TAG_RE, "").replace(/[^\S\n]+/g, " ").trim();
   return { title: title || raw.trim(), tags };
 }
 
@@ -27,7 +29,9 @@ export function parseCapture(raw: string, referenceDate: Date = new Date()): Par
   const projectMatch = raw.match(PROJECT_RE);
   const project = projectMatch ? projectMatch[0].slice(1) : null;
 
-  const withoutMarkers = raw.replace(TAG_RE, "").replace(PROJECT_RE, "").replace(/\s+/g, " ").trim();
+  // collapse horizontal whitespace only — a bare \s+ was swallowing the
+  // newlines a user typed, so multi-line captures displayed as one line
+  const withoutMarkers = raw.replace(TAG_RE, "").replace(PROJECT_RE, "").replace(/[^\S\n]+/g, " ").trim();
 
   const parser = CJK_RE.test(raw) ? chrono.zh : chrono.en;
   const [result] = parser.parse(withoutMarkers, referenceDate, { forwardDate: true });
@@ -39,7 +43,7 @@ export function parseCapture(raw: string, referenceDate: Date = new Date()): Par
       withoutMarkers.slice(0, result.index) +
       withoutMarkers.slice(result.index + result.text.length)
     )
-      .replace(/\s+/g, " ")
+      .replace(/[^\S\n]+/g, " ")
       .trim();
   }
   if (!title) title = withoutMarkers || raw.trim();

@@ -76,6 +76,7 @@ export type Database = {
       }
       captures: {
         Row: {
+          audio_path: string | null
           converted_to_task_id: string | null
           created_at: string | null
           duration_seconds: number | null
@@ -92,6 +93,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audio_path?: string | null
           converted_to_task_id?: string | null
           created_at?: string | null
           duration_seconds?: number | null
@@ -108,6 +110,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audio_path?: string | null
           converted_to_task_id?: string | null
           created_at?: string | null
           duration_seconds?: number | null
@@ -540,6 +543,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "task_attachments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_comments: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
