@@ -7,6 +7,7 @@ import type { Task } from "@/hooks/use-tasks";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TaskLinkPicker } from "@/components/shared/task-link-picker";
 import { Markdown } from "@/components/shared/markdown";
+import { CaptureAttachments } from "@/components/capture/capture-attachments";
 import { createClient } from "@/lib/supabase/client";
 
 /** A wall of sticky notes — masonry via CSS columns, no library needed. */
@@ -90,23 +91,6 @@ export function CaptureGrid({
               </span>
             )}
 
-            {editingId === c.id ? (
-              <textarea
-                autoFocus
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                onBlur={() => commitEdit(c)}
-                onKeyDown={(e) => onEditKeyDown(e, c)}
-                rows={3}
-                className="w-full resize-y bg-transparent text-body text-foreground outline-none"
-              />
-            ) : (
-              <Markdown text={c.parsed_title || c.raw_text} className={c.processed ? "!text-muted" : ""} />
-            )}
-
-            {c.audio_path && <VoiceCapturePlayer path={c.audio_path} />}
-
             <div className="flex flex-wrap items-center gap-2">
               <span className="label !text-faint">
                 {new Date(c.created_at ?? "").toLocaleString("en-US", {
@@ -128,6 +112,25 @@ export function CaptureGrid({
               ))}
               {c.processed && <span className="label !text-success">[TRIAGED]</span>}
             </div>
+
+            {editingId === c.id ? (
+              <textarea
+                autoFocus
+                value={draftText}
+                onChange={(e) => setDraftText(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                onBlur={() => commitEdit(c)}
+                onKeyDown={(e) => onEditKeyDown(e, c)}
+                rows={3}
+                className="w-full resize-y bg-transparent text-body text-foreground outline-none"
+              />
+            ) : (
+              <Markdown text={c.parsed_title || c.raw_text} className={c.processed ? "!text-muted" : ""} />
+            )}
+
+            {c.audio_path && <VoiceCapturePlayer path={c.audio_path} />}
+
+            <CaptureAttachments captureId={c.id} />
 
             <div className="flex items-center gap-1 border-t border-border pt-2 opacity-0 transition-mech group-hover:opacity-100">
               <IconButton label="Edit" onClick={() => startEditing(c)}>
