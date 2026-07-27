@@ -8,6 +8,7 @@ import { useCaptures, type Capture } from "@/hooks/use-captures";
 import { useTasks, type Task } from "@/hooks/use-tasks";
 import { todayString } from "@/lib/date";
 import { pickResurfaceCapture } from "@/lib/resurface";
+import { uploadAttachment } from "@/lib/attachments";
 
 const FILTERS = [
   { label: "TO TRIAGE", value: false },
@@ -33,11 +34,19 @@ export default function CapturePage() {
   );
   const pending = inbox.captures.filter((c) => !c.processed).length;
 
-  async function handleCapture(rawText: string) {
+  async function handleCapture(rawText: string, file?: File) {
     const created = await inbox.createCapture({ raw_text: rawText });
     if (created?.id) {
       setJustCapturedId(created.id);
       setTimeout(() => setJustCapturedId(null), 900);
+      if (file) {
+        await uploadAttachment({
+          bucket: "capture-attachments",
+          apiBase: `/api/captures/${created.id}/attachments`,
+          folder: created.id,
+          file,
+        });
+      }
     }
     allCaptures.refetch();
   }
@@ -126,6 +135,7 @@ export default function CapturePage() {
           onArchive={(id) => inbox.updateCapture(id, { processed: true })}
           onDelete={handleDelete}
           onEdit={handleEdit}
+          onPin={(capture) => inbox.updateCapture(capture.id, { pinned: !capture.pinned })}
         />
       )}
     </div>

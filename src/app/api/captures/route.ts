@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
     insert.parsed_due = parsed.due ? parsed.due.toISOString() : null;
   }
 
+  if (body.converted_to_task_id) insert.converted_to_task_id = body.converted_to_task_id;
+
   const { data, error } = await supabase.from("captures").insert(insert).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ capture: data }, { status: 201 });

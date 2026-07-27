@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CornerDownLeft } from "lucide-react";
+import { CornerDownLeft, Paperclip, X } from "lucide-react";
 import { parseCapture } from "@/lib/nlp-parser";
 import { VoiceRecordButton } from "@/components/capture/voice-record-button";
 
@@ -23,13 +23,15 @@ export function QuickAdd({
   onCapture,
   onVoiceCapture,
 }: {
-  onCapture: (rawText: string) => Promise<void> | void;
+  onCapture: (rawText: string, file?: File) => Promise<void> | void;
   onVoiceCapture: (audioPath: string) => Promise<void> | void;
 }) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(() => (value.trim() ? parseCapture(value) : null), [value]);
   const expanded = focused || value.length > 0;
@@ -46,8 +48,10 @@ export function QuickAdd({
     if (!text || saving) return;
     setSaving(true);
     setValue("");
+    const file = pendingFile;
+    setPendingFile(null);
     try {
-      await onCapture(text);
+      await onCapture(text, file ?? undefined);
     } finally {
       setSaving(false);
       textareaRef.current?.focus();
@@ -71,7 +75,7 @@ export function QuickAdd({
         expanded ? "border-border-visible bg-surface px-5 py-4" : "border-border bg-surface px-5 py-3"
       }`}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
         <textarea
           ref={textareaRef}
           value={value}
@@ -83,8 +87,41 @@ export function QuickAdd({
           rows={1}
           className="w-full flex-1 resize-none overflow-hidden bg-transparent text-body text-foreground outline-none transition-mech placeholder:text-faint"
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) setPendingFile(file);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          aria-label="Attach file"
+          onClick={() => fileInputRef.current?.click()}
+          className="shrink-0 text-faint transition-mech hover:text-foreground"
+        >
+          <Paperclip size={16} strokeWidth={1.5} />
+        </button>
         <VoiceRecordButton onRecorded={onVoiceCapture} />
       </div>
+
+      {pendingFile && (
+        <div className="mt-2 flex w-fit items-center gap-1.5 rounded-full border border-border-visible px-2.5 py-1">
+          <Paperclip size={11} strokeWidth={1.5} className="text-faint" />
+          <span className="label !text-muted">{pendingFile.name}</span>
+          <button
+            type="button"
+            aria-label="Remove attachment"
+            onClick={() => setPendingFile(null)}
+            className="text-faint transition-mech hover:!text-accent"
+          >
+            <X size={11} strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       {expanded && (parsed?.due || parsed?.project || (parsed?.tags.length ?? 0) > 0 || true) && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { CheckSquare, Archive, Trash2, Link2, Sparkles, Pencil } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { CheckSquare, Archive, Trash2, Link2, Sparkles, Pencil, Paperclip, Pin, PinOff } from "lucide-react";
 import type { Capture } from "@/hooks/use-captures";
 import type { Task } from "@/hooks/use-tasks";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TaskLinkPicker } from "@/components/shared/task-link-picker";
 import { Markdown } from "@/components/shared/markdown";
-import { CaptureAttachments } from "@/components/capture/capture-attachments";
+import { AttachmentManager, type AttachmentManagerHandle } from "@/components/shared/attachment-manager";
 import { createClient } from "@/lib/supabase/client";
 
 /** A wall of sticky notes — masonry via CSS columns, no library needed. */
@@ -21,6 +21,7 @@ export function CaptureGrid({
   onArchive,
   onDelete,
   onEdit,
+  onPin,
 }: {
   captures: Capture[];
   tasks: Task[];
@@ -31,10 +32,20 @@ export function CaptureGrid({
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (capture: Capture, text: string) => void;
+  onPin: (capture: Capture) => void;
 }) {
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const attachmentRefs = useRef<Record<string, AttachmentManagerHandle | null>>({});
+
+  function onCardDrop(e: React.DragEvent, captureId: string) {
+    e.preventDefault();
+    setDragOverId(null);
+    const file = e.dataTransfer.files?.[0];
+    if (file) attachmentRefs.current[captureId]?.uploadFile(file);
+  }
 
   function startEditing(c: Capture) {
     setEditingId(c.id);
@@ -62,7 +73,9 @@ export function CaptureGrid({
   // already processed) — pin it into the wall anyway rather than duplicate
   // the "review an old thought" feature as a separate block
   const alreadyShown = resurfaceCapture && captures.some((c) => c.id === resurfaceCapture.id);
-  const items = resurfaceCapture && !alreadyShown ? [resurfaceCapture, ...captures] : captures;
+  const ordered = resurfaceCapture && !alreadyShown ? [resurfaceCapture, ...captures] : captures;
+  // pinned notes stay put at the top of the wall regardless of triage/created_at order
+  const items = [...ordered].sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   if (items.length === 0) {
     return (
@@ -80,14 +93,34 @@ export function CaptureGrid({
         return (
           <div
             key={c.id}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOverId(c.id);
+            }}
+            onDragLeave={() => setDragOverId((cur) => (cur === c.id ? null : cur))}
+            onDrop={(e) => onCardDrop(e, c.id)}
             className={`group mb-3 flex break-inside-avoid flex-col gap-3 rounded-2xl border px-4 py-4 transition-mech ${
-              isResurfaced ? "border-hero" : c.processed ? "border-border" : "border-border-visible"
-            } ${c.id === justCapturedId ? "capture-pop" : ""}`}
+              dragOverId === c.id
+                ? "border-hero"
+                : isResurfaced
+                  ? "border-hero"
+                  : c.pinned
+                    ? "border-border"
+                    : c.processed
+                      ? "border-border"
+                      : "border-border-visible"
+            } ${c.id === justCapturedId ? "capture-pop" : ""} ${c.pinned ? "pin-glow" : ""}`}
           >
             {isResurfaced && (
               <span className="label flex items-center gap-1.5 !text-hero">
                 <Sparkles size={11} strokeWidth={1.5} />
                 FROM THE ARCHIVE
+              </span>
+            )}
+            {!isResurfaced && c.pinned && (
+              <span className="label flex items-center gap-1.5 !text-accent">
+                <Pin size={11} strokeWidth={1.5} />
+                PINNED
               </span>
             )}
 
@@ -130,11 +163,25 @@ export function CaptureGrid({
 
             {c.audio_path && <VoiceCapturePlayer path={c.audio_path} />}
 
-            <CaptureAttachments captureId={c.id} />
+            <AttachmentManager
+              ref={(el) => {
+                attachmentRefs.current[c.id] = el;
+              }}
+              bucket="capture-attachments"
+              apiBase={`/api/captures/${c.id}/attachments`}
+              folder={c.id}
+              hideDefaultTrigger
+            />
 
             <div className="flex items-center gap-1 border-t border-border pt-2 opacity-0 transition-mech group-hover:opacity-100">
+              <IconButton label={c.pinned ? "Unpin" : "Pin"} onClick={() => onPin(c)}>
+                {c.pinned ? <PinOff size={15} strokeWidth={1.5} /> : <Pin size={15} strokeWidth={1.5} />}
+              </IconButton>
               <IconButton label="Edit" onClick={() => startEditing(c)}>
                 <Pencil size={15} strokeWidth={1.5} />
+              </IconButton>
+              <IconButton label="Attach file" onClick={() => attachmentRefs.current[c.id]?.open()}>
+                <Paperclip size={15} strokeWidth={1.5} />
               </IconButton>
               {!c.processed && (
                 <IconButton label="Convert to task" onClick={() => onConvert(c)}>

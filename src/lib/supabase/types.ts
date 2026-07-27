@@ -124,6 +124,7 @@ export type Database = {
           parsed_due: string | null
           parsed_tags: string[] | null
           parsed_title: string | null
+          pinned: boolean
           processed: boolean | null
           raw_text: string
           source: Database["public"]["Enums"]["capture_source"] | null
@@ -141,6 +142,7 @@ export type Database = {
           parsed_due?: string | null
           parsed_tags?: string[] | null
           parsed_title?: string | null
+          pinned?: boolean
           processed?: boolean | null
           raw_text: string
           source?: Database["public"]["Enums"]["capture_source"] | null
@@ -158,6 +160,7 @@ export type Database = {
           parsed_due?: string | null
           parsed_tags?: string[] | null
           parsed_title?: string | null
+          pinned?: boolean
           processed?: boolean | null
           raw_text?: string
           source?: Database["public"]["Enums"]["capture_source"] | null

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import type { Capture } from "@/hooks/use-captures";
+import { findMoodInRange, MOOD_EMOJI, type MoodEntry } from "@/hooks/use-mood";
 import {
   formatDay,
   formatDuration,
@@ -21,9 +22,11 @@ const SNAP_MINUTES = 15;
 const MIN_CREATE_MINUTES = 15;
 const DRAG_MIME = "text/everything-capture-id";
 const DRAG_OFFSET_MIME = "text/everything-grab-offset-min";
+export const TASK_DRAG_MIME = "text/everything-task-id";
 
 export type Reschedule = (entryId: string, newStart: Date, newEnd: Date) => void;
 export type CreateEntry = (start: Date, end: Date) => void;
+export type CreateFromTask = (taskId: string, start: Date, end: Date) => void;
 
 type PositionedBlock = { entry: Capture; top: number; height: number; col: number; cols: number };
 
@@ -118,16 +121,20 @@ export function TimelineView({
   entries,
   anchor,
   mode,
+  moods,
   onSelect,
   onReschedule,
   onCreate,
+  onCreateFromTask,
 }: {
   entries: Capture[];
   anchor: string;
   mode: PeriodMode;
+  moods?: MoodEntry[];
   onSelect: (entry: Capture) => void;
   onReschedule: Reschedule;
   onCreate: CreateEntry;
+  onCreateFromTask: CreateFromTask;
 }) {
   const { start, end } = periodRange(anchor, mode);
 
@@ -145,24 +152,49 @@ export function TimelineView({
     return <MonthGrid entries={inPeriod} anchor={anchor} onSelect={onSelect} onReschedule={onReschedule} onCreate={onCreate} />;
   }
   if (mode === "WEEK") {
-    return <WeekGrid entries={inPeriod} anchor={anchor} onSelect={onSelect} onReschedule={onReschedule} onCreate={onCreate} />;
+    return (
+      <WeekGrid
+        entries={inPeriod}
+        anchor={anchor}
+        moods={moods}
+        onSelect={onSelect}
+        onReschedule={onReschedule}
+        onCreate={onCreate}
+        onCreateFromTask={onCreateFromTask}
+      />
+    );
   }
-  return <DayColumn entries={inPeriod} day={parseDay(anchor)} onSelect={onSelect} onReschedule={onReschedule} onCreate={onCreate} showAxis />;
+  return (
+    <DayColumn
+      entries={inPeriod}
+      day={parseDay(anchor)}
+      moods={moods}
+      onSelect={onSelect}
+      onReschedule={onReschedule}
+      onCreate={onCreate}
+      onCreateFromTask={onCreateFromTask}
+      showAxis
+    />
+  );
 }
 
 function DayColumn({
   entries,
   day,
+  moods,
   onSelect,
   onReschedule,
   onCreate,
+  onCreateFromTask,
   showAxis,
 }: {
   entries: Capture[];
   day: Date;
+  moods?: MoodEntry[];
   onSelect: (entry: Capture) => void;
   onReschedule: Reschedule;
   onCreate: CreateEntry;
+  onCreateFromTask: CreateFromTask;
   showAxis?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -173,9 +205,56 @@ function DayColumn({
   const blocks = layoutDay(entries, day);
   const totalHeight = HOURS.length * HOUR_HEIGHT;
 
+  // dragging a block's bottom edge changes its duration in place, no dialog
+  const [resize, setResize] = useState<{ entryId: string; startY: number; startSeconds: number; liveSeconds: number } | null>(null);
+  const resizeRef = useRef(resize);
+  // the pointerup that ends a resize still fires a native click on the block
+  // right after — swallow exactly that one click so it doesn't open the entry dialog
+  const justResizedRef = useRef(false);
+
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    resizeRef.current = resize;
+  }, [resize]);
+
+  useEffect(() => {
+    if (!resize) return;
+    function move(e: PointerEvent) {
+      const deltaMinutes = ((e.clientY - resize!.startY) / HOUR_HEIGHT) * 60;
+      const rawSeconds = resize!.startSeconds + deltaMinutes * 60;
+      const snappedSeconds = Math.round(rawSeconds / (SNAP_MINUTES * 60)) * (SNAP_MINUTES * 60);
+      const clamped = Math.max(SNAP_MINUTES * 60, snappedSeconds);
+      setResize((r) => (r ? { ...r, liveSeconds: clamped } : r));
+    }
+    function up() {
+      const r = resizeRef.current;
+      setResize(null);
+      if (!r) return;
+      justResizedRef.current = true;
+      const entry = entries.find((en) => en.id === r.entryId);
+      if (!entry?.start_time) return;
+      const newStart = new Date(entry.start_time);
+      const newEnd = new Date(newStart.getTime() + r.liveSeconds * 1000);
+      onReschedule(r.entryId, newStart, newEnd);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- entries/onReschedule stable enough for the lifetime of one drag
+  }, [!!resize]);
+
+  function startResize(e: ReactPointerEvent, entry: Capture) {
+    e.stopPropagation();
+    e.preventDefault();
+    const startSeconds = entry.duration_seconds ?? 60;
+    setResize({ entryId: entry.id, startY: e.clientY, startSeconds, liveSeconds: startSeconds });
+  }
 
   // window-level listeners while a create-drag is in flight, so the gesture
   // keeps tracking even if the cursor leaves the track bounds
@@ -220,6 +299,18 @@ function DayColumn({
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setDragOver(false);
+    const track = e.currentTarget.getBoundingClientRect();
+
+    const taskId = e.dataTransfer.getData(TASK_DRAG_MIME);
+    if (taskId) {
+      const minute = minutesFromClientY(e.clientY, track.top);
+      const newStart = new Date(day);
+      newStart.setHours(0, minute, 0, 0);
+      const newEnd = new Date(newStart.getTime() + 30 * 60000);
+      onCreateFromTask(taskId, newStart, newEnd);
+      return;
+    }
+
     const id = e.dataTransfer.getData(DRAG_MIME);
     const dragged = entries.find((en) => en.id === id);
     if (!dragged) return;
@@ -227,7 +318,6 @@ function DayColumn({
     // is — subtract back the offset grabbed at drag-start so the block
     // doesn't jump to align its grabbed point with the cursor
     const grabOffsetMinutes = Number(e.dataTransfer.getData(DRAG_OFFSET_MIME) || 0);
-    const track = e.currentTarget.getBoundingClientRect();
     const adjustedClientY = e.clientY - (grabOffsetMinutes / 60) * HOUR_HEIGHT;
     const { newStart, newEnd } = resolveDrop(adjustedClientY, track.top, day, dragged.duration_seconds ?? 60);
     onReschedule(dragged.id, newStart, newEnd);
@@ -278,33 +368,63 @@ function DayColumn({
           </div>
         )}
 
-        {blocks.map(({ entry, top, height, col, cols }) => (
-          <button
-            key={entry.id}
-            type="button"
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(DRAG_MIME, entry.id);
-              const blockTop = e.currentTarget.getBoundingClientRect().top;
-              const grabOffsetMinutes = ((e.clientY - blockTop) / HOUR_HEIGHT) * 60;
-              e.dataTransfer.setData(DRAG_OFFSET_MIME, String(grabOffsetMinutes));
-              e.dataTransfer.effectAllowed = "move";
-            }}
-            onClick={() => onSelect(entry)}
-            title={`${entry.parsed_title ?? entry.raw_text} · ${formatDuration(entry.duration_seconds ?? 0)}`}
-            className="absolute flex cursor-grab items-center overflow-hidden rounded-md bg-hero px-2 text-left transition-mech hover:opacity-80 active:cursor-grabbing"
-            style={{
-              top,
-              height,
-              left: `calc(${(col / cols) * 100}% + 2px)`,
-              width: `calc(${100 / cols}% - 4px)`,
-            }}
-          >
-            <span className="truncate font-mono text-caption text-black">
-              {entry.parsed_title ?? entry.raw_text}
-            </span>
-          </button>
-        ))}
+        {blocks.map(({ entry, top, height, col, cols }) => {
+          const isResizing = resize?.entryId === entry.id;
+          const displayHeight = isResizing ? Math.max(5, (resize!.liveSeconds / 3600) * HOUR_HEIGHT) : height;
+          const mood = moods?.length ? findMoodInRange(moods, entry.start_time, entry.end_time) : null;
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(DRAG_MIME, entry.id);
+                const blockTop = e.currentTarget.getBoundingClientRect().top;
+                const grabOffsetMinutes = ((e.clientY - blockTop) / HOUR_HEIGHT) * 60;
+                e.dataTransfer.setData(DRAG_OFFSET_MIME, String(grabOffsetMinutes));
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onClick={() => {
+                if (justResizedRef.current) {
+                  justResizedRef.current = false;
+                  return;
+                }
+                onSelect(entry);
+              }}
+              title={`${entry.parsed_title ?? entry.raw_text} · ${formatDuration(entry.duration_seconds ?? 0)}`}
+              className={`group absolute flex cursor-grab items-center overflow-hidden rounded-md bg-hero px-2 text-left transition-mech hover:opacity-80 active:cursor-grabbing ${
+                isResizing ? "opacity-90" : ""
+              }`}
+              style={{
+                top,
+                height: displayHeight,
+                left: `calc(${(col / cols) * 100}% + 2px)`,
+                width: `calc(${100 / cols}% - 4px)`,
+              }}
+            >
+              <span className="truncate font-mono text-caption text-black">
+                {isResizing ? formatDuration(resize!.liveSeconds) : (entry.parsed_title ?? entry.raw_text)}
+              </span>
+
+              {mood && (
+                <span className="absolute right-1 top-0.5 text-[10px] leading-none" title={`Mood: ${MOOD_EMOJI[mood.score]}`}>
+                  {MOOD_EMOJI[mood.score]}
+                </span>
+              )}
+
+              {/* drag to change duration in place — no dialog needed */}
+              <div
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+                onPointerDown={(e) => startResize(e, entry)}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize opacity-0 transition-mech group-hover:opacity-100"
+              >
+                <div className="mx-auto mt-1 h-0.5 w-4 rounded-full bg-black/50" />
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -313,15 +433,19 @@ function DayColumn({
 function WeekGrid({
   entries,
   anchor,
+  moods,
   onSelect,
   onReschedule,
   onCreate,
+  onCreateFromTask,
 }: {
   entries: Capture[];
   anchor: string;
+  moods?: MoodEntry[];
   onSelect: (entry: Capture) => void;
   onReschedule: Reschedule;
   onCreate: CreateEntry;
+  onCreateFromTask: CreateFromTask;
 }) {
   const weekStart = startOfWeek(parseDay(anchor));
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -354,7 +478,15 @@ function WeekGrid({
               </span>
               {dayTotal > 0 && <span className="label !text-faint">{formatDuration(dayTotal)}</span>}
             </div>
-            <DayColumn entries={entries} day={day} onSelect={onSelect} onReschedule={onReschedule} onCreate={onCreate} />
+            <DayColumn
+              entries={entries}
+              day={day}
+              moods={moods}
+              onSelect={onSelect}
+              onReschedule={onReschedule}
+              onCreate={onCreate}
+              onCreateFromTask={onCreateFromTask}
+            />
           </div>
         );
       })}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Play } from "lucide-react";
 import { TagInput } from "@/components/tasks/tag-input";
 import { PrioritySlider } from "@/components/tasks/priority-slider";
-import { TaskAttachments } from "@/components/tasks/task-attachments";
+import { AttachmentManager, type AttachmentManagerHandle } from "@/components/shared/attachment-manager";
 import { TaskComments } from "@/components/tasks/task-comments";
 import { Markdown } from "@/components/shared/markdown";
+import { useTimer } from "@/components/time/timer-provider";
 import type { Task } from "@/hooks/use-tasks";
 import type { Enums } from "@/lib/supabase/types";
 
@@ -32,8 +33,23 @@ export function TaskDetail({
   const [description, setDescription] = useState(task?.description ?? "");
   const [editingDescription, setEditingDescription] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const attachmentsRef = useRef<AttachmentManagerHandle>(null);
+  const timer = useTimer();
 
   if (!task) return null;
+
+  function startNow() {
+    timer.start({ description: task!.title, linkedTaskId: task!.id });
+    onOpenChange(false);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) attachmentsRef.current?.uploadFile(file);
+  }
 
   function flashSaved() {
     setSaved(true);
@@ -49,7 +65,17 @@ export function TaskDetail({
     <Dialog.Root open={!!task} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 transition-mech" style={{ background: "rgba(0,0,0,0.8)" }} />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-full max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border-visible bg-surface p-6 transition-mech">
+        <Dialog.Content
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          className={`fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-full max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border bg-surface p-6 transition-mech ${
+            dragOver ? "border-hero" : "border-border-visible"
+          }`}
+        >
           <div className="flex items-start justify-between gap-4">
             <Dialog.Title asChild>
               <input
@@ -139,24 +165,39 @@ export function TaskDetail({
               <TagInput tags={task.tags ?? []} onChange={(tags) => save({ tags })} />
             </Field>
 
-            <TaskAttachments taskId={task.id} />
+            <AttachmentManager
+              ref={attachmentsRef}
+              bucket="task-attachments"
+              apiBase={`/api/tasks/${task.id}/attachments`}
+              folder={task.id}
+            />
 
             <TaskComments taskId={task.id} />
           </div>
 
           <div className="mt-8 flex items-center justify-between border-t border-border pt-4">
             <span className="label !text-faint">{saved ? "[SAVED]" : " "}</span>
-            <button
-              type="button"
-              onClick={() => {
-                onDelete(task.id);
-                onOpenChange(false);
-              }}
-              className="label flex items-center gap-1.5 text-faint transition-mech hover:!text-accent"
-            >
-              <Trash2 size={14} strokeWidth={1.5} />
-              DELETE
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={startNow}
+                className="label flex items-center gap-1.5 !text-hero transition-mech hover:!text-accent"
+              >
+                <Play size={12} strokeWidth={1.5} />
+                START NOW
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete(task.id);
+                  onOpenChange(false);
+                }}
+                className="label flex items-center gap-1.5 text-faint transition-mech hover:!text-accent"
+              >
+                <Trash2 size={14} strokeWidth={1.5} />
+                DELETE
+              </button>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

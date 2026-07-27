@@ -13,6 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = await request.json();
   const update: TablesUpdate<"captures"> = {};
   if ("processed" in body) update.processed = body.processed;
+  if ("pinned" in body) update.pinned = body.pinned;
   if ("converted_to_task_id" in body) update.converted_to_task_id = body.converted_to_task_id;
   if ("raw_text" in body) update.raw_text = body.raw_text;
   if ("parsed_title" in body) update.parsed_title = body.parsed_title;

@@ -5,9 +5,12 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TimelineView } from "@/components/time/timeline-view";
 import { TimeAnalytics } from "@/components/time/time-analytics";
 import { EntryDetail } from "@/components/time/entry-detail";
+import { TaskDragPanel } from "@/components/time/task-drag-panel";
 import { useCaptures } from "@/hooks/use-captures";
+import { useTasks } from "@/hooks/use-tasks";
+import { useMoodEntries, findMoodInRange } from "@/hooks/use-mood";
 import { todayString } from "@/lib/date";
-import { periodLabel, shiftPeriod, type PeriodMode } from "@/lib/period";
+import { periodLabel, periodRange, shiftPeriod, type PeriodMode } from "@/lib/period";
 
 const TABS = ["TIMELINE", "ANALYTICS"] as const;
 type Tab = (typeof TABS)[number];
@@ -22,6 +25,9 @@ export default function TimePage() {
   const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
 
   const timeline = useCaptures({ is_timer: true });
+  const { tasks } = useTasks();
+  const periodBounds = periodRange(anchor, mode);
+  const moods = useMoodEntries({ from: periodBounds.start.toISOString(), to: periodBounds.end.toISOString() });
 
   // the sidebar timer writes through its own client, so this page has to be
   // told when a session lands rather than owning that write itself
@@ -47,6 +53,22 @@ export default function TimePage() {
     // its detail immediately rather than leaving "Untitled session" sitting there
     setDetailId(created.id);
     setPendingCreateId(created.id);
+  }
+
+  async function handleCreateFromTask(taskId: string, start: Date, end: Date) {
+    // dropping a task is already the complete action — no detail dialog
+    // afterward; rename/re-time it in place (click to edit, drag the block's
+    // bottom edge to resize) rather than interrupting the drag with a modal
+    const task = tasks.find((t) => t.id === taskId);
+    const durationSeconds = Math.round((end.getTime() - start.getTime()) / 1000);
+    await timeline.createCapture({
+      raw_text: task?.title ?? "Untitled session",
+      is_timer: true,
+      converted_to_task_id: taskId,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      duration_seconds: durationSeconds,
+    });
   }
 
   return (
@@ -117,16 +139,23 @@ export default function TimePage() {
       </header>
 
       {tab === "TIMELINE" ? (
-        <TimelineView
-          entries={timeline.captures}
-          anchor={anchor}
-          mode={mode}
-          onSelect={(entry) => setDetailId(entry.id)}
-          onReschedule={(id, newStart, newEnd) =>
-            timeline.updateCapture(id, { start_time: newStart.toISOString(), end_time: newEnd.toISOString() })
-          }
-          onCreate={handleCreateEntry}
-        />
+        <div className="flex gap-6">
+          <div className="min-w-0 flex-1">
+            <TimelineView
+              entries={timeline.captures}
+              anchor={anchor}
+              mode={mode}
+              moods={moods.entries}
+              onSelect={(entry) => setDetailId(entry.id)}
+              onReschedule={(id, newStart, newEnd) =>
+                timeline.updateCapture(id, { start_time: newStart.toISOString(), end_time: newEnd.toISOString() })
+              }
+              onCreate={handleCreateEntry}
+              onCreateFromTask={handleCreateFromTask}
+            />
+          </div>
+          <TaskDragPanel />
+        </div>
       ) : (
         <TimeAnalytics entries={timeline.captures} anchor={anchor} mode={mode} />
       )}
@@ -134,6 +163,7 @@ export default function TimePage() {
       <EntryDetail
         key={detailEntry?.id ?? "empty"}
         entry={detailEntry}
+        mood={detailEntry ? findMoodInRange(moods.entries, detailEntry.start_time, detailEntry.end_time) : null}
         onOpenChange={(open) => {
           if (!open) {
             // closing without saving (ESC, backdrop, X) on a freshly

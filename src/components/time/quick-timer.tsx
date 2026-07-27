@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Play, Pause, Square, Timer as TimerIcon, X, Bell, Link2, Plus, SlidersHorizontal } from "lucide-react";
+import { Play, Pause, Square, X, Bell, Link2 } from "lucide-react";
 import { useTimer, formatElapsed, type ReminderMinutes } from "@/components/time/timer-provider";
 import { TaskLinkPicker } from "@/components/shared/task-link-picker";
 import { useTasks, type Task } from "@/hooks/use-tasks";
+import { broadcastMoodChanged, MOOD_EMOJI } from "@/hooks/use-mood";
+import { DotGlyph, MOOD_GLYPH, DIM_GLYPH, TIMER_GLYPH } from "@/components/shared/dot-glyph";
+
+const MOODS = Object.entries(MOOD_EMOJI).map(([value, emoji]) => ({ value: Number(value), emoji }));
 
 const REMINDER_OPTIONS: { label: string; value: ReminderMinutes }[] = [
   { label: "OFF", value: null },
@@ -31,6 +35,11 @@ export function TimerDock() {
   const { tasks } = useTasks();
   const [panelOpen, setPanelOpen] = useState(false);
   const [opacityPanelOpen, setOpacityPanelOpen] = useState(false);
+  const [moodPanelOpen, setMoodPanelOpen] = useState(false);
+  const [moodScore, setMoodScore] = useState<number | null>(null);
+  const [moodNote, setMoodNote] = useState("");
+  const [moodTime, setMoodTime] = useState(""); // blank = now
+  const [moodStatus, setMoodStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draft, setDraft] = useState("");
   const [draftTask, setDraftTask] = useState<Task | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -101,6 +110,34 @@ export function TimerDock() {
     setPanelOpen((o) => !o);
   }
 
+  async function submitMood() {
+    if (!moodScore) return;
+    setMoodStatus("saving");
+    const res = await fetch("/api/mood", {
+      method: "POST",
+      body: JSON.stringify({
+        score: moodScore,
+        note: moodNote.trim() || null,
+        // blank input means "now" — the API's DB default already covers
+        // that, so only send a value when the user actually picked a time
+        recorded_at: moodTime ? new Date(moodTime).toISOString() : undefined,
+      }),
+    });
+    if (!res.ok) {
+      setMoodStatus("error");
+      return;
+    }
+    broadcastMoodChanged();
+    setMoodStatus("saved");
+    setTimeout(() => {
+      setMoodPanelOpen(false);
+      setMoodScore(null);
+      setMoodNote("");
+      setMoodTime("");
+      setMoodStatus("idle");
+    }, 700);
+  }
+
   function startFromPanel() {
     timer.start({
       description: draft || draftTask?.title || "",
@@ -152,6 +189,68 @@ export function TimerDock() {
           </button>
         </div>
       ))}
+
+      {moodPanelOpen && (
+        <div className="flex w-64 flex-col gap-3 rounded-2xl border border-border-visible bg-surface p-4 transition-mech">
+          <div className="flex items-center justify-between">
+            <span className="label">LOG MOOD</span>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setMoodPanelOpen(false)}
+              className="text-faint transition-mech hover:text-foreground"
+            >
+              <X size={13} strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-1">
+            {MOODS.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                aria-label={`Mood ${m.value}`}
+                onClick={() => setMoodScore((cur) => (cur === m.value ? null : m.value))}
+                className={`flex h-9 w-9 items-center justify-center rounded-full text-body transition-mech ${
+                  moodScore === m.value ? "bg-hero" : "opacity-40 hover:opacity-80"
+                }`}
+              >
+                {m.emoji}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={moodNote}
+            onChange={(e) => setMoodNote(e.target.value)}
+            placeholder="What's going on? (optional)"
+            rows={2}
+            className="w-full resize-y border-0 border-b border-border-visible bg-transparent pb-1 text-body-sm text-foreground outline-none transition-mech focus:border-foreground placeholder:text-faint"
+          />
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="label !text-faint">WHEN</span>
+            <input
+              type="datetime-local"
+              value={moodTime}
+              onChange={(e) => setMoodTime(e.target.value)}
+              placeholder="Now"
+              className="label rounded-full border border-border-visible bg-transparent px-3 py-1.5 text-foreground outline-none"
+            />
+          </div>
+
+          {moodStatus === "error" && <p className="label !text-accent">[ERROR] Could not save.</p>}
+
+          <button
+            type="button"
+            onClick={submitMood}
+            disabled={!moodScore || moodStatus === "saving"}
+            className="label flex h-9 items-center justify-center gap-2 rounded-full bg-hero text-black transition-mech hover:opacity-90 disabled:opacity-40"
+          >
+            {moodStatus === "saved" ? "[SAVED]" : moodStatus === "saving" ? "[SAVING...]" : "LOG"}
+          </button>
+        </div>
+      )}
 
       {opacityPanelOpen && (
         <div className="flex w-56 items-center gap-3 rounded-2xl border border-border-visible bg-surface p-4 transition-mech">
@@ -263,11 +362,19 @@ export function TimerDock() {
       <div className="flex items-center gap-1.5">
         <button
           type="button"
+          aria-label="Log mood"
+          onClick={() => setMoodPanelOpen((o) => !o)}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-border-visible bg-surface text-faint transition-mech hover:text-foreground"
+        >
+          <DotGlyph rows={MOOD_GLYPH} />
+        </button>
+        <button
+          type="button"
           aria-label="Adjust dock transparency"
           onClick={() => setOpacityPanelOpen((o) => !o)}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-border-visible bg-surface text-faint transition-mech hover:text-foreground"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-border-visible bg-surface text-faint transition-mech hover:text-foreground"
         >
-          <SlidersHorizontal size={13} strokeWidth={1.5} />
+          <DotGlyph rows={DIM_GLYPH} />
         </button>
         <button
           type="button"
@@ -275,13 +382,9 @@ export function TimerDock() {
           onPointerMove={onDragPointerMove}
           onPointerUp={onDragPointerUp}
           aria-label={timer.sessions.length > 0 ? "Start another timer" : "Start a timer"}
-          className="flex h-12 w-12 cursor-grab items-center justify-center rounded-full border border-border-visible bg-surface text-muted transition-mech hover:text-foreground active:cursor-grabbing"
+          className="flex h-10 w-10 cursor-grab items-center justify-center rounded-full border border-border-visible bg-surface text-muted transition-mech hover:text-foreground active:cursor-grabbing"
         >
-          {timer.sessions.length > 0 ? (
-            <Plus size={18} strokeWidth={1.5} />
-          ) : (
-            <TimerIcon size={18} strokeWidth={1.5} />
-          )}
+          <DotGlyph rows={TIMER_GLYPH} />
         </button>
       </div>
     </div>

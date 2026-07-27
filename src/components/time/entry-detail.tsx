@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, Trash2, Link2 } from "lucide-react";
 import type { Capture } from "@/hooks/use-captures";
 import { useTasks } from "@/hooks/use-tasks";
+import { MOOD_EMOJI, type MoodEntry } from "@/hooks/use-mood";
 import { TaskLinkPicker } from "@/components/shared/task-link-picker";
 import { formatDuration } from "@/lib/period";
 
@@ -18,11 +19,13 @@ function toLocalInput(iso: string | null): string {
 
 export function EntryDetail({
   entry,
+  mood,
   onOpenChange,
   onSave,
   onDelete,
 }: {
   entry: Capture | null;
+  mood?: MoodEntry | null;
   onOpenChange: (open: boolean) => void;
   onSave: (id: string, patch: Record<string, unknown>) => Promise<unknown>;
   onDelete: (id: string) => void;
@@ -146,6 +149,16 @@ export function EntryDetail({
               </button>
             )}
           </div>
+
+          {mood && (
+            <div className="mt-4 flex items-center gap-2 rounded-full border border-border px-3 py-1.5">
+              <span className="text-body">{MOOD_EMOJI[mood.score]}</span>
+              <span className="label !text-faint">
+                MOOD LOGGED {new Date(mood.recorded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </span>
+              {mood.note && <span className="min-w-0 flex-1 truncate text-body-sm text-muted">{mood.note}</span>}
+            </div>
+          )}
 
           {status === "error" && <p className="label mt-4 !text-accent">[ERROR] {errorMessage}</p>}
 

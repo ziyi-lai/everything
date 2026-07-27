@@ -192,4 +192,71 @@
   .timer-marquee {
     animation: timer-marquee 8s linear infinite;
   }
+
+  /* Dock glyph icons idle-twinkle like an LED matrix left on — each lit dot
+     breathes between dim and full brightness, staggered per-dot so the
+     glyph reads as quietly alive rather than a static pictogram. Opacity
+     only, no movement, per the system's motion rule. */
+  @keyframes dot-glyph-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  .dot-glyph-pulse {
+    animation: dot-glyph-pulse 2.2s var(--ease-out-mech) infinite;
+  }
+
+  /* Pinned capture cards: a single hard-edged dot runs around the border —
+     dot-matrix motif, not a soft light (no blur/shadow, per design system).
+     Earlier version animated a conic-gradient's angle through a masked
+     ring (mask-composite: exclude) — that combo intermittently glitched
+     in Chromium (a full wedge/bar instead of a thin ring, sometimes
+     bleeding into a neighboring masonry column), because it repainted an
+     animated gradient+mask every frame. Plain top/left keyframes instead:
+     percentages resolve against the card's own box, so this needs no
+     per-card measurement, and each keyframe pair only changes one axis —
+     the dot travels in straight lines along each edge in turn, no gradient
+     or mask involved at all. */
+  @keyframes pin-glow-rotate {
+    0% {
+      top: 0;
+      left: 0;
+    }
+    25% {
+      top: 0;
+      left: 100%;
+    }
+    50% {
+      top: 100%;
+      left: 100%;
+    }
+    75% {
+      top: 100%;
+      left: 0;
+    }
+    100% {
+      top: 0;
+      left: 0;
+    }
+  }
+  .pin-glow {
+    position: relative;
+  }
+  .pin-glow::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 9999px;
+    background: var(--accent);
+    animation: pin-glow-rotate 2.4s linear infinite;
+    pointer-events: none;
+  }
 }
